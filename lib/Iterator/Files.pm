@@ -244,7 +244,7 @@ sub _advance {
 
     if ( defined($self->{_edit}) && defined($self->{_rewrite_fh}) ) {
 	close($self->{_rewrite_fh})
-	  or croak("Error rewriting $self->current_file: $!");
+	  or croak("Error rewriting ", $self->current_file, ": $!");
 	undef $self->{_rewrite_fh};
 	select($self->{_reset_fh});
     }
@@ -260,11 +260,11 @@ sub _advance {
 	if ( $self->{_magic} eq 'all'
 	     || $self->{_magic} eq 'stdin' && $self->current_file eq '-' ) {
 	    open($self->{_current_fh}, $self->current_file)
-	      or croak("$self->current_file: $!");
+	      or croak($self->current_file, ": $!");
 	}
 	else {
 	    open($self->{_current_fh}, '<', $self->current_file)
-	      or croak("$self->current_file: $!");
+	      or croak($self->current_file, ": $!");
 	}
 
 	if ( eof($self->{_current_fh}) ) {
@@ -311,7 +311,7 @@ sub has_next {
     !$self->is_eof || $self->_advance;
 }
 
-#use overload 'bool' => \&has_next;
+use overload 'bool' => \&has_next;
 
 =head2 is_eof
 
