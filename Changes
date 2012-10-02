@@ -1,5 +1,13 @@
 Revision history for Iterator-Diamond
 
+0.04	2012-10-02
+        Suggestions by Martin Becker (rt-79486):
+        - read from STDIN if @ARGV is empty
+        - explicitly enable $^I feature
+        - read from pipes (inadequate size check hampered this)
+        - document that suffix must be non-empty
+        - fix failed test rt-56053
+
 0.03	2008-08-07
 	Fixes.
 

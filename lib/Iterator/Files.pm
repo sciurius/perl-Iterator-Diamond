@@ -12,7 +12,8 @@ Iterator::Files - Iterate through the contents of a list of files
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
+$VERSION =~ tr/_//d;
 
 =head1 SYNOPSIS
 
@@ -135,7 +136,8 @@ unsafe again, just like the built-in C<< <> >> operator.
 
 Enables in-place editing of files, just as the built-in C<< <> >> operator.
 
-Using the perl command line option C<-I>I<suffix> has the same effect.
+Unlike the built-in operator semantics, an empty suffix to discard backup
+files is not supported.
 
 =item B<< files => >> I<aref>
 
@@ -161,7 +163,7 @@ sub new {
     if ( exists $args{edit} ) {
 	$self->{_edit} = delete $args{edit};
 	croak($pkg."::new: Value for 'edit' option (backup suffix) may not be empty")
-	  if $self->{_edit} eq '';
+	  if defined($self->{_edit}) && $self->{_edit} eq '';
     }
     if ( exists $args{files} ) {
 	$self->{_files} = delete $args{files};
@@ -229,12 +231,18 @@ sub readline {
 # called only once and with scalar context.
 use overload '<>' => \&readline;
 
+sub _magic_stdin {
+    my $self = shift;
+    my $magic = $self->{_magic};
+    return 'stdin' eq $magic || 'all' eq $magic;
+}
+
 sub _advance {
     my $self = shift;
 
     $self->{_init} = 1;
 
-    if ( $self->{_edit} && defined($self->{_rewrite_fh}) ) {
+    if ( defined($self->{_edit}) && defined($self->{_rewrite_fh}) ) {
 	close($self->{_rewrite_fh})
 	  or croak("Error rewriting $self->current_file: $!");
 	undef $self->{_rewrite_fh};
@@ -259,7 +267,14 @@ sub _advance {
 	      or croak("$self->current_file: $!");
 	}
 
-	if ( $self->{_edit} ) {
+	if ( eof($self->{_current_fh}) ) {
+	    close $self->{_current_fh};
+	    undef $self->{_current_fh};
+	    undef ${ $self->{_current_file} };
+	    CORE::next;
+	}
+
+	if ( defined $self->{_edit} ) {
 	    my $fname = $self->current_file;
 	    my $backup = $fname;
 	    if ( $self->{_edit} !~ /\*/ ) {
@@ -276,7 +291,7 @@ sub _advance {
 	    $self->{_reset_fh} = select($self->{_rewrite_fh});
 	}
 
-	return -t $self->{_current_fh} || -s $self->{_current_fh};
+	return 1;
     }
 }
 

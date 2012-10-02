@@ -13,7 +13,8 @@ Iterator::Diamond - Iterate through the files from ARGV
 
 =cut
 
-our $VERSION = '0.02';
+our $VERSION = '0.04';
+$VERSION =~ tr/_//d;
 
 =head1 SYNOPSIS
 
@@ -136,11 +137,21 @@ unsafe again, just like the built-in C<< <> >> operator.
 
 Enables in-place editing of files, just as the built-in C<< <> >> operator.
 
-Using the perl command line option C<-I>I<suffix> has the same effect.
+Unlike the built-in operator semantics, an empty suffix to discard backup
+files is not supported.
+
+=item B<< use_i_option >> I<boolean>
+
+If set to true, and if B<edit> is not specified, the perl command line
+option C<-i>I<suffix> will be used to enable or disable in-place editing.
+By default, perl command line options are ignored.
 
 =item B<< files => >> I<aref>
 
 Use this list of files instead of @ARGV.
+
+If C<files> are not specified and C<stdin> or C<all> magic is in effect,
+an empty @ARGV will be treated as a list containing a single dash C<< - >>.
 
 =back
 
@@ -148,9 +159,15 @@ Use this list of files instead of @ARGV.
 
 sub new {
     my ($pkg, %args) = @_;
+    my $use_i_option = delete $args{use_i_option};
+    if ($use_i_option && !exists($args{edit}) && defined $^I) {
+        $args{edit} = $^I;
+    }
     my $self = $pkg->SUPER::new( files => \@ARGV, %args );
+    if ( !exists($args{files}) && !@ARGV && $self->_magic_stdin ) {
+        @ARGV = qw(-);
+    }
     $self->{_current_file} = \$ARGV;
-    $self->{_edit} = $^I unless defined $self->{_edit};
     return $self;
 }
 
