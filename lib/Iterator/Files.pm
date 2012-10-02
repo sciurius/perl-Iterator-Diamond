@@ -12,7 +12,7 @@ Iterator::Files - Iterate through the contents of a list of files
 
 =cut
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 =head1 SYNOPSIS
 
@@ -276,7 +276,7 @@ sub _advance {
 	    $self->{_reset_fh} = select($self->{_rewrite_fh});
 	}
 
-	return -t $self->{_current_fh} || -s _;
+	return -t $self->{_current_fh} || -s $self->{_current_fh};
     }
 }
 
