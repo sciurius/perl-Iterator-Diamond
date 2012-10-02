@@ -170,9 +170,10 @@ sub readline {
 #### WARNING ####
 # From overload.pm: Even in list context, the iterator is currently
 # called only once and with scalar context.
-use overload '<>' => \&readline;
+#use overload '<>' => \&readline;
 
 sub _advance {
+warn("ADVANCE");
     my $self = shift;
     my $res = $self->SUPER::_advance;
     return unless $res;
@@ -205,6 +206,10 @@ C<next> will open the next file if available and start reading it.
 This is the equivalent of the 'eof' function.
 
 =cut
+
+sub is_eof {
+    shift->SUPER::is_eof;
+}
 
 =head2 current_file
 
@@ -319,19 +324,40 @@ under the same terms as Perl itself.
 
 =cut
 
-=begin maybe_later
+#=begin maybe_later
 
 sub TIEHANDLE {
     goto &new;
+}
+
+sub OPEN {
+warn("OPEN");
 }
 
 sub READLINE {
     goto &readline;
 }
 
-tie *::ARGV, 'Iterator::Diamond';
+sub EOF {
+warn("EOF @{[caller(0)]}");
+    goto &is_eof;
+}
 
-=end maybe_later
+sub import {
+    my $pkg = shift;
+    tie *::ARGV, $pkg, @_;
+}
+
+#my $core_global_eof = *CORE::GLOBAL::eof;
+
+#*CORE::GLOBAL::eof = sub {
+#    warn("CGE @{[caller(0)]}");
+#    return &$core_global_eof
+#      unless defined $_[0];
+#    shift->has_next;
+#};
+
+#=end maybe_later
 
 =cut
 
