@@ -15,3 +15,4 @@ t/30-edit.t
 t/31-i_option.t
 Makefile.PL
 META.yml
+META.json
