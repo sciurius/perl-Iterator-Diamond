@@ -12,7 +12,7 @@ Iterator::Files - Iterate through the contents of a list of files
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 =head1 SYNOPSIS
 
@@ -252,11 +252,11 @@ sub _advance {
 	if ( $self->{_magic} eq 'all'
 	     || $self->{_magic} eq 'stdin' && $self->current_file eq '-' ) {
 	    open($self->{_current_fh}, $self->current_file)
-	      or croak("$self->current_file: $!");
+	      or croak($self->current_file, ": $!");
 	}
 	else {
 	    open($self->{_current_fh}, '<', $self->current_file)
-	      or croak("$self->current_file: $!");
+	      or croak($self->current_file, ": $!");
 	}
 
 	if ( $self->{_edit} ) {
@@ -296,7 +296,7 @@ sub has_next {
     !$self->is_eof || $self->_advance;
 }
 
-#use overload 'bool' => \&has_next;
+use overload 'bool' => \&has_next;
 
 =head2 is_eof
 
