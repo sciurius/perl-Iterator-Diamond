@@ -1,6 +1,7 @@
 Build.PL
 Changes
 lib/Iterator/Diamond.pm
+lib/Iterator/Files.pm
 MANIFEST
 README
 t/00-load.t

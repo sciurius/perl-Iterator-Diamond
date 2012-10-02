@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use Test::More tests => 24;
 use File::Spec;
-use Iterator::Diamond;
+use Iterator::Files;
 
 -d 't' && chdir 't';
 
@@ -20,7 +20,7 @@ $ARGV = "foobar";
 
 my @files = ( "$id.tmp" );
 
-my $it = Iterator::Diamond->new( files => \@files );
+my $it = Iterator::Files->new( files => \@files );
 
 ok(@ARGV == 2, "\@ARGV untouched");
 is($ARGV, "foobar", "\$ARGV untouched");
@@ -53,7 +53,7 @@ close($f);
 
 @files = ( "$id.tmp" );
 
-$it = Iterator::Diamond->new( files => \@files );
+$it = Iterator::Files->new( files => \@files );
 
 $line = <$it>;
 is($line, "Hello, World1!\n", "line1");
@@ -71,7 +71,7 @@ is($lines[0], "Hello, World2!\n", "line2");
 is($lines[1], "Hello, World3!\n", "line3");
 
 @files = ( "$id.tmp", "$id.tmp" );
-$it = Iterator::Diamond->new( files => \@files );
+$it = Iterator::Files->new( files => \@files );
 
 @lines = ();
 while ( <$it> ) {
