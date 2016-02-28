@@ -16,7 +16,7 @@ my $builder = Module::Build->new(
         'File::Spec' => 0,
     },
     add_to_cleanup      => [ 'Iterator-Diamond-*' ],
-    create_makefile_pl => 'traditional',
+#    create_makefile_pl => 'traditional',
 );
 
 $builder->create_build_script();

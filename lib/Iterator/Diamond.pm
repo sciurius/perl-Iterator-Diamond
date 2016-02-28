@@ -13,7 +13,7 @@ Iterator::Diamond - Iterate through the files from ARGV
 
 =cut
 
-our $VERSION = '1.00';
+our $VERSION = '1.01';
 $VERSION =~ tr/_//d;
 
 =head1 SYNOPSIS
